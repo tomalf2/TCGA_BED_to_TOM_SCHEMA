@@ -2,6 +2,7 @@ import sys
 from typing import List
 from os import listdir, path
 import re
+import shutil
 
 INPUT_FILE_PATTERN = r'.+\.bed$'
 OUTPUT_FIELDS_TO_BE_UNIQUE = [0, 1, 8, 9]  # chrom, start, ref, alt
@@ -14,7 +15,8 @@ except Exception:
           '2. the output directory path.\n'
           f'This module will convert files matching the regex {INPUT_FILE_PATTERN}'
           ' by removing duplicated variants, splitting REF AL1 AL1 into REF ALT AL1 AL2, and removing from REF and ALT ' 
-          'equal sequences of nucleotides preceding the variant.')
+          'equal sequences of nucleotides preceding the variant.\n'
+          f'The files that don\'t match {INPUT_FILE_PATTERN} are copied as is into the destination folder.')
     sys.exit(1)
 if input_dir_location[-1] != path.sep:
     input_dir_location += path.sep
@@ -97,6 +99,9 @@ def transform_files():
     for file in listdir(input_dir_location):
         if re.match(INPUT_FILE_PATTERN, file):
             names_files_to_transform.append(file)
+        else:
+            shutil.copy(input_dir_location+file, output_dir_location)
+
     print(f'found {len(names_files_to_transform)} files to transform')
 
     for file_name in names_files_to_transform:
@@ -110,3 +115,6 @@ def transform_files():
                     for output_lines in transform_line(line, transformed_variants):
                         output_file.write(output_lines+'\n')
         print('done')
+
+
+transform_files()
