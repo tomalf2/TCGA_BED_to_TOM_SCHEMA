@@ -3,6 +3,8 @@ from typing import List
 from os import listdir, path
 import re
 import shutil
+from pathlib import Path
+from distutils.dir_util import copy_tree
 
 INPUT_FILE_PATTERN = r'.+\.bed$'
 OUTPUT_FIELDS_TO_BE_UNIQUE = [0, 1, 8, 9]  # chrom, start, ref, alt
@@ -22,6 +24,11 @@ if input_dir_location[-1] != path.sep:
     input_dir_location += path.sep
 if output_dir_location[-1] != path.sep:
     output_dir_location += path.sep
+# create clean output dir if it doesn't exists
+odp = Path(output_dir_location)
+if odp.exists() and odp.is_dir():
+    shutil.rmtree(odp)
+odp.mkdir(parents=True, exist_ok=True)
 
 
 def minimal_representation_of_variant(fields_of_variant: List[str]) -> str:
@@ -95,14 +102,19 @@ def transform_files():
     print(f'reading content of dir {input_dir_location}')
     print(f'transformed files will be written into {output_dir_location}')
     # find files to_transform
+    num_files = 0
     names_files_to_transform = list()
     for file in listdir(input_dir_location):
+        num_files +=1
         if re.match(INPUT_FILE_PATTERN, file):
             names_files_to_transform.append(file)
-        else:
+        elif path.isfile(input_dir_location+file):
             shutil.copy(input_dir_location+file, output_dir_location)
+        else:
+            copy_tree(input_dir_location+file, output_dir_location+file)
 
-    print(f'found {len(names_files_to_transform)} files to transform')
+    print(f'{num_files} children to copy into the {output_dir_location}')
+    print(f'{len(names_files_to_transform)} files to transform')
 
     for file_name in names_files_to_transform:
         print(f'transforming {file_name}', end='\t...\t')
