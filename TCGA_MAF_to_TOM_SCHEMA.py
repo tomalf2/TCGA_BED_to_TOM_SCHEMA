@@ -29,6 +29,7 @@ odp = Path(output_dir_location)
 if odp.exists() and odp.is_dir():
     shutil.rmtree(odp)
 odp.mkdir(parents=True, exist_ok=True)
+log_file = open('./log.log', mode='w')
 
 
 def minimal_representation_of_variant(fields_of_variant: List[str]) -> str:
@@ -101,11 +102,12 @@ def transform_line(input_l: str, already_transformed_outputs: set):
 def transform_files():
     print(f'reading content of dir {input_dir_location}')
     print(f'transformed files will be written into {output_dir_location}')
+    print('if needed, you can see the list of files transformed in the file log.log in the same directory of the script.')
     # find files to_transform
     num_files = 0
     names_files_to_transform = list()
     for file in listdir(input_dir_location):
-        num_files +=1
+        num_files += 1
         if re.match(INPUT_FILE_PATTERN, file):
             names_files_to_transform.append(file)
         elif path.isfile(input_dir_location+file):
@@ -113,20 +115,28 @@ def transform_files():
         else:
             copy_tree(input_dir_location+file, output_dir_location+file)
 
-    print(f'{num_files} children to copy into the {output_dir_location}')
+    print(f'{num_files} total files of {input_dir_location} to write into {output_dir_location}')
     print(f'{len(names_files_to_transform)} files to transform')
 
     for file_name in names_files_to_transform:
-        print(f'transforming {file_name}', end='\t...\t')
+        print(f'transforming {file_name}', end='\t...\t', file=log_file)
         with open(input_dir_location+file_name, 'r', encoding='utf-8') as input_file:
             with open(output_dir_location+file_name, 'w', encoding='utf-8') as output_file:
                 transformed_variants = set()
                 # transform input file line by line
+                num_lines = 0
                 for line in input_file:
+                    num_lines += 1
                     line = line.rstrip('\n')
                     for output_lines in transform_line(line, transformed_variants):
                         output_file.write(output_lines+'\n')
-        print('done')
+                if len(transformed_variants) == 0 and num_lines != 0:
+                    print(f'was reading file {input_file.name}')
+                    raise Exception(f'was reading file {input_file.name} but hey, no region was transformed!')
+        print('done', file=log_file)
 
 
-transform_files()
+try :
+    transform_files()
+finally:
+    log_file.close()
