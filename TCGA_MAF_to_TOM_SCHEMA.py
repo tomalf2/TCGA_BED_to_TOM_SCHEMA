@@ -63,6 +63,13 @@ def remove_prefix(ref: str, alt: str):
     return ref[idx:], alt[idx:]
 
 
+def remove_slash(allele_string) -> str:
+    if allele_string == '-':
+        return ''
+    else:
+        return allele_string
+
+
 def find_nth_occurrence_in_string(what: str, in_str: str, n_th):
     start = in_str.find(what)
     while start >= 0 and n_th > 1:
@@ -88,6 +95,8 @@ def transform_line(input_l: str, already_transformed_outputs: set):
     for var in replacement_lines:
         # remove prefix nucleotides
         var[8], var[9] = remove_prefix(var[8], var[9])
+        var[8] = remove_slash(var[8])
+        var[9] = remove_slash(var[9])
         # check if such a variant has already been transformed
         var_rep = minimal_representation_of_variant(var)
         if var_rep not in already_transformed_outputs:
