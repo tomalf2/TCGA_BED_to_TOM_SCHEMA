@@ -38,6 +38,12 @@ def minimal_representation_of_variant(fields_of_variant: List[str]) -> str:
 
 
 def split_variants(input_line: str) -> List[List[str]]:
+    """
+    In general this method returns two arrays formed like below:
+    original variants [chrom: reference allele] + [alt1] + [al1, al2] + original_variant[id:]
+    original variants [chrom: reference allele] + [alt2] + [al1, al2] + original_variant[id:]
+    However, if alt1 and alt2 have the same value, then only one array is returned, with both al1 and al2 = to 1.
+    """
     fields = input_line.split('\t')
     output = list()
     trailing_fields = fields[11:]
@@ -54,20 +60,36 @@ def split_variants(input_line: str) -> List[List[str]]:
                 fields[0:9] + [fields[10], '0', '1'] + trailing_fields
             )
     return output
+OUTPUT_IDX = {
+    'chrom': 0,
+    'start': 1,
+    'stop': 2,
+    'strand': 3,
+    'mut_type': 7,
+    'ref': 8,
+    'alt': 9,
+    'al1': 10,
+    'al2': 11,
+    'id': 12
+}
 
 
-def remove_prefix(ref: str, alt: str):
+def remove_common_allele_prefix(ref: str, alt: str):
     idx = 0
     while idx < len(ref) and idx < len(alt) and ref[idx] == alt[idx]:
         idx += 1
     return ref[idx:], alt[idx:]
 
 
-def remove_slash(allele_string) -> str:
+def remove_slash_for_empty_alleles(allele_string) -> str:
     if allele_string == '-':
         return ''
     else:
         return allele_string
+
+
+def remove_novel_variant_ids(id_string:str) -> str:
+    return '' if id_string == 'novel' else id_string
 
 
 def find_nth_occurrence_in_string(what: str, in_str: str, n_th):
@@ -78,9 +100,9 @@ def find_nth_occurrence_in_string(what: str, in_str: str, n_th):
     return start
 
 # example input
+pos ='0     1           2           3   4       5       6                   7   8   9   10  11      12                              13                              14      15      16'
 s1 = 'chr9	123936008	123936008	+	CNTRL	11064	Missense_Mutation	SNP	G	G	A	null	TCGA-BJ-A2NA-01A-12D-A19J-08	TCGA-BJ-A2NA-10A-01D-A19M-08	null	null	055f269a-df3a-4063-a414-59e6a33cbba2'
 s2 = 'chr9	123936008	123936008	+	CNTRL	11064	Missense_Mutation	SNP	G	G	A	null	TCGA-BJ-A2NA-01A-12D-A19J-08	TCGA-BJ-A2NA-11A-11D-A19J-08	null	null	c88a3e4d-4316-4bc3-b2fa-0ac3dd76e558'
-s3='0       1           2           3   4       5       6                   7   8   9   10  11      12                              13                              14      15      16'
 s4 = 'chr9	123936008	123936008	+	CNTRL	11064	Missense_Mutation	SNP	G	T	A	null	TCGA-BJ-A2NA-01A-12D-A19J-08	TCGA-BJ-A2NA-11A-11D-A19J-08	null	null	c88a3e4d-4316-4bc3-b2fa-0ac3dd76e558'
 s5 = '7	140453139	140453163	1	CNTRL	11064	Missense_Mutation	INS	TAGCTAGACCAAAATCACCTATTT	TAGCTAGACCAAAATCACCTATTT	TAGCTAGACCAAAATCACCTATTTTAGCTAGACCAAAATCACCTATTT	rs121913368'
 s52 = '7	140453139	140453193	1	CNTRL	11064	Missense_Mutation	INS	TAGCTAGACCAAAATCACCTATTTTTACTGTGAGGTCTTCATGAAGAAATATAT	TAGCTAGACCAAAATCACCTATTTTTACTGTGAGGTCTTCATGAAGAAATATAT	TAGCTAGACCAAAATCACCTATTTTTACTGTGAGGTCTTCATGAAGAAATATATTAGCTAGACCAAAATCACCTATTTTTACTGTGAGGTCTTCATGAAGAAATATAT	rs121913370'
@@ -94,10 +116,11 @@ def transform_line(input_l: str, already_transformed_outputs: set):
     replacement_lines: List[List[str]] = split_variants(input_l)
     for var in replacement_lines:
         # remove prefix nucleotides
-        var[8], var[9] = remove_prefix(var[8], var[9])
-        var[8] = remove_slash(var[8])
-        var[9] = remove_slash(var[9])
-        # check if such a variant has already been transformed
+        var[OUTPUT_IDX['ref']], var[OUTPUT_IDX['alt']] = remove_common_allele_prefix(var[OUTPUT_IDX['ref']], var[OUTPUT_IDX['alt']])
+        var[OUTPUT_IDX['ref']] = remove_slash_for_empty_alleles(var[OUTPUT_IDX['ref']])
+        var[OUTPUT_IDX['alt']] = remove_slash_for_empty_alleles(var[OUTPUT_IDX['alt']])
+        var[OUTPUT_IDX['id']] = remove_novel_variant_ids(var[OUTPUT_IDX['id']])
+        # return the transformed variant only if it new in already_transformed_output
         var_rep = minimal_representation_of_variant(var)
         if var_rep not in already_transformed_outputs:
             already_transformed_outputs.add(var_rep)
