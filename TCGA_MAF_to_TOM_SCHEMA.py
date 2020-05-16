@@ -31,13 +31,16 @@ if odp.exists() and odp.is_dir():
 odp.mkdir(parents=True, exist_ok=True)
 log_file = open('./log.log', mode='w')
 
+valid_chromosomes = {'chr1', 'chr10', 'chr11', 'chr12', 'chr13', 'chr14', 'chr15', 'chr16', 'chr17', 'chr18', 'chr19', 'chr2', 'chr20', 'chr21', 'chr22', 'chr3', 'chr4', 'chr5', 'chr6', 'chr7', 'chr8', 'chr9', 'chrX', 'chrY', 'chrMT', 'chr23', 'chr24', 'chr25',
+                     '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25'}
+
 
 def minimal_representation_of_variant(fields_of_variant: List[str]) -> str:
     fields_to_be_unique = [fields_of_variant[i] for i in OUTPUT_FIELDS_TO_BE_UNIQUE]
     return '\t'.join(fields_to_be_unique)
 
 
-def split_variants(input_line: str) -> List[List[str]]:
+def split_variants(input_line: str, skip_weird_chromosomes:bool=True) -> List[List[str]]:
     """
     In general this method returns two arrays formed like below:
     original variants [chrom: reference allele] + [alt1] + [al1, al2] + original_variant[id:]
@@ -46,20 +49,23 @@ def split_variants(input_line: str) -> List[List[str]]:
     """
     fields = input_line.split('\t')
     output = list()
-    trailing_fields = fields[11:]
-    if fields[8] != fields[9]:
-        output.append(
-            fields[0:10] + ['1', '0'] + trailing_fields
-        )
-    if fields[8] != fields[10]:
-        if fields[9] == fields[10]:
-            # i.e. if there's a second variant, but it's equal to the first one
-            output[0][11] = '1'
-        else:
+    if skip_weird_chromosomes and fields[0] not in valid_chromosomes:
+        return output
+    else:
+        trailing_fields = fields[11:]
+        if fields[8] != fields[9]:  # ref != alt1
             output.append(
-                fields[0:9] + [fields[10], '0', '1'] + trailing_fields
+                fields[0:10] + ['1', '0'] + trailing_fields
             )
-    return output
+        if fields[8] != fields[10]: # ref != alt2
+            if fields[9] == fields[10]: # alt1 == alt2
+                # i.e. if there's a second variant, but it's equal to the first one
+                output[0][11] = '1'
+            else:
+                output.append(
+                    fields[0:9] + [fields[10], '0', '1'] + trailing_fields
+                )
+        return output
 OUTPUT_IDX = {
     'chrom': 0,
     'start': 1,
@@ -74,11 +80,16 @@ OUTPUT_IDX = {
 }
 
 
-def remove_common_allele_prefix(ref: str, alt: str):
+def remove_common_allele_prefix(ref: str, alt: str, start:str, stop:str):
     idx = 0
     while idx < len(ref) and idx < len(alt) and ref[idx] == alt[idx]:
         idx += 1
-    return ref[idx:], alt[idx:]
+    # update start
+    start = int(start)+idx
+    # safety measure... you never know
+    if int(stop) < start:
+        stop = start
+    return ref[idx:], alt[idx:], str(start), str(stop)
 
 
 def remove_slash_for_empty_alleles(allele_string) -> str:
@@ -90,6 +101,14 @@ def remove_slash_for_empty_alleles(allele_string) -> str:
 
 def remove_novel_variant_ids(id_string:str) -> str:
     return '' if id_string == 'novel' else id_string
+
+
+def convert_1_to_0_based_coordinates(start:str, stop:str, mut_type:str):
+    start, stop = int(start), int(stop)
+    start -= 1
+    if mut_type == 'INS':
+        stop = start
+    return str(start), str(stop)
 
 
 def find_nth_occurrence_in_string(what: str, in_str: str, n_th):
@@ -108,17 +127,24 @@ s5 = '7	140453139	140453163	1	CNTRL	11064	Missense_Mutation	INS	TAGCTAGACCAAAATC
 s52 = '7	140453139	140453193	1	CNTRL	11064	Missense_Mutation	INS	TAGCTAGACCAAAATCACCTATTTTTACTGTGAGGTCTTCATGAAGAAATATAT	TAGCTAGACCAAAATCACCTATTTTTACTGTGAGGTCTTCATGAAGAAATATAT	TAGCTAGACCAAAATCACCTATTTTTACTGTGAGGTCTTCATGAAGAAATATATTAGCTAGACCAAAATCACCTATTTTTACTGTGAGGTCTTCATGAAGAAATATAT	rs121913370'
 s6 = 'chr9	123936008	123936008	+	CNTRL	11064	Missense_Mutation	SNP	G	A	A	null	TCGA-BJ-A2NA-01A-12D-A19J-08	TCGA-BJ-A2NA-11A-11D-A19J-08	null	null	c88a3e4d-4316-4bc3-b2fa-0ac3dd76e558'
 s7 = 'chr9	123936008	123936008	+	CNTRL	11064	Missense_Mutation	SNP	G	G	G	null	TCGA-BJ-A2NA-01A-12D-A19J-08	TCGA-BJ-A2NA-11A-11D-A19J-08	null	null	c88a3e4d-4316-4bc3-b2fa-0ac3dd76e558'
+# the following line is not a real case
+s8 = 'chrGL000193.1	8	8	+	CNTRL	11064	Missense_Mutation	SNP	G	GAA	G	null	TCGA-BJ-A2NA-01A-12D-A19J-08	TCGA-BJ-A2NA-11A-11D-A19J-08	null	null	c88a3e4d-4316-4bc3-b2fa-0ac3dd76e558'
 
 
 def transform_line(input_l: str, already_transformed_outputs: set):
     output_lines = list()
     # separate variants
-    replacement_lines: List[List[str]] = split_variants(input_l)
+    replacement_lines: List[List[str]] = split_variants(input_l, skip_weird_chromosomes=True)
     for var in replacement_lines:
         # remove prefix nucleotides
-        var[OUTPUT_IDX['ref']], var[OUTPUT_IDX['alt']] = remove_common_allele_prefix(var[OUTPUT_IDX['ref']], var[OUTPUT_IDX['alt']])
+        var[OUTPUT_IDX['ref']], var[OUTPUT_IDX['alt']] , var[OUTPUT_IDX['start']], var[OUTPUT_IDX['stop']]= remove_common_allele_prefix(
+            var[OUTPUT_IDX['ref']],
+            var[OUTPUT_IDX['alt']],
+            var[OUTPUT_IDX['start']],
+            var[OUTPUT_IDX['stop']])
         var[OUTPUT_IDX['ref']] = remove_slash_for_empty_alleles(var[OUTPUT_IDX['ref']])
         var[OUTPUT_IDX['alt']] = remove_slash_for_empty_alleles(var[OUTPUT_IDX['alt']])
+        var[OUTPUT_IDX['start']], var[OUTPUT_IDX['stop']] = convert_1_to_0_based_coordinates(var[OUTPUT_IDX['start']], var[OUTPUT_IDX['stop']], var[OUTPUT_IDX['mut_type']])
         var[OUTPUT_IDX['id']] = remove_novel_variant_ids(var[OUTPUT_IDX['id']])
         # return the transformed variant only if it new in already_transformed_output
         var_rep = minimal_representation_of_variant(var)
